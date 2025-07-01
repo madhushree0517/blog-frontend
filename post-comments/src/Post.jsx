@@ -1,121 +1,139 @@
-import React, { useState } from 'react'
-function Post(){
+import React, { useState, useEffect } from 'react';
+import { db } from './firebase.js';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+} from 'firebase/firestore';
 
-    const [posts, setPosts] = useState([])
-    const [title, setTitle] = useState("")
-    const [content, setContent] = useState("")
-    const [commentInputs, setCommentInputs] = useState({});
+function Post() {
+  const [posts, setPosts] = useState([]);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [commentInputs, setCommentInputs] = useState({});
 
-    function handleTitleChange(e){
-        setTitle(e.target.value)
-    }
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'posts'), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setPosts(data);
+    });
 
-    function handleContentChange(e){
-        setContent(e.target.value)
-    }
+    return () => unsubscribe();
+  }, []);
 
-    function addPost(){
-        if (!title.trim()||!content.trim()) return
-        setPosts([...posts,{title,content,comments:[]}])
-        setTitle("")
-        setContent("")
+  function handleTitleChange(e) {
+    setTitle(e.target.value);
+  }
 
-    }
+  function handleContentChange(e) {
+    setContent(e.target.value);
+  }
+ 
+  async function addPost() {
+    if (!title.trim() || !content.trim()) return;
+    await addDoc(collection(db, 'posts'), {
+      title,
+      content,
+      comments: [],
+    });
 
-    function DeletePost(index){
-        const updatedPosts = posts.filter((_,i)=> i!==index);
-        setPosts(updatedPosts)
-    }
+    setTitle('');
+    setContent('');
+  }
 
-    function handleCommentChange(e, index){
-        setCommentInputs({ ...commentInputs,[index]:e.target.value})
-    }
+  async function DeletePost(id) {
+    await deleteDoc(doc(db, 'posts', id));
+  }
 
-    function addComment(index) {
-        const comment = commentInputs[index];
-        if (!comment?.trim()) return;
-        const updatedPosts = posts.map((post, i) =>
-            i === index
-        ? { ...post, comments: [...post.comments, comment] }
-        : post
-    );
-    setPosts(updatedPosts);
-    setCommentInputs({ ...commentInputs, [index]: "" });
-    }
-    function deleteComment(postIndex, commentIndex) {
-        const updatedPosts = posts.map((post, i) => {
-            if (i === postIndex) {
-                const updatedComments = post.comments.filter((_, j) => j !== commentIndex);
-                return { ...post, comments: updatedComments };
-            }
-            return post;
-        });
-        setPosts(updatedPosts);
-    }
-    return(
+  function handleCommentChange(e, index) {
+    setCommentInputs({ ...commentInputs, [index]: e.target.value });
+  }
+
+  async function addComment(index) {
+    const comment = commentInputs[index];
+    if (!comment?.trim()) return;
+    const post = posts[index];
+    await updateDoc(doc(db, 'posts', post.id), {
+      comments: arrayUnion(comment),
+    });
+
+    setCommentInputs({ ...commentInputs, [index]: '' });
+  }
+
+  async function deleteComment(postIndex, commentIndex) {
+    const post = posts[postIndex];
+    const commentToDelete = post.comments[commentIndex];
+    await updateDoc(doc(db, 'posts', post.id), {
+      comments: arrayRemove(commentToDelete),
+    });
+  }
+
+  return (
     <div className="post">
-        <h1>POST IT</h1>
-        <div>
-            <input className="title-input"
-            type="text" 
-            placeholder="Enter your post Title..."
-            value={title}
-            onChange={handleTitleChange}
+      <h1>POST IT</h1>
+      <div>
+        <input
+          className="title-input"
+          type="text"
+          placeholder="Enter your post Title..."
+          value={title}
+          onChange={handleTitleChange}
         />
-        </div>
-        <div>
-            <textarea className="content-input"
-            type="text" 
-            placeholder="Enter your post content..."
-            value={content}
-            onChange={handleContentChange}
-            />
-            </div>
-            <button className='add-post-button'
-            onClick={addPost}>ADD POST
+      </div>
+      <div>
+        <textarea
+          className="content-input"
+          placeholder="Enter your post content..."
+          value={content}
+          onChange={handleContentChange}
+        />
+      </div>
+      <button className="add-post-button" onClick={addPost}>
+        ADD POST
+      </button>
+      <ol>
+        {posts.map((post, index) => (
+          <li key={post.id}>
+            <strong>{post.title}</strong>
+            <br />
+            <span className="text">{post.content}</span>
+            <br />
+            <button className="delete-button" onClick={() => DeletePost(post.id)}>
+              Delete
             </button>
-        
-        <ol>
-            {posts.map((post,index) =>(
-            <li key={index}>
-                <strong>{post.title}</strong><br/>
-                <span className="text">{post.content}</span><br/>
-                <button className="delete-button"onClick={()=>DeletePost(index)}>
-                    Delete
-                </button>
-                {}
-                <div className="comment-section">
-                    <input
-                    type="text"
-                    placeholder="Write a comment..."
-                    value={commentInputs[index] || ""}
-                    onChange={(e) => handleCommentChange(e, index)}
-                    className="comment-input"
-                    />
-                    <button 
-                    onClick={() => addComment(index)} 
-                    className="add-comment-button"
-                    >
-                        Add Comment
-                        </button>
-                        <ul className="comments-list">
-                            {post.comments && post.comments.map((comment, i) => (
-                                <li key={i} className="comment-item">{comment}
-                                <button 
-                                onClick={() => deleteComment(index, i)} 
-                                className="delete-comment-button"
-                                >
-                                    Delete
-                                    </button>
-                                    </li>
-                                ))}
-                                </ul>
-                                </div>
-                                </li> 
-                            ))}
-                            </ol>
-                            </div>
-                        );
-
+            <div className="comment-section">
+              <input
+                type="text"
+                placeholder="Write a comment..."
+                value={commentInputs[index] || ''}
+                onChange={(e) => handleCommentChange(e, index)}
+                className="comment-input"
+              />
+              <button onClick={() => addComment(index)} className="add-comment-button">
+                Add Comment
+              </button>
+              <ul className="comments-list">
+                {post.comments &&
+                  post.comments.map((comment, i) => (
+                    <li key={i} className="comment-item">
+                      {comment}
+                      <button onClick={() => deleteComment(index, i)} className="delete-comment-button">
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
-export default Post
+
+export default Post;
